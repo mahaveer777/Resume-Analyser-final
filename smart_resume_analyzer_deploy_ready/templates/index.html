@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Resume Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #334155; }
+        .navbar-custom { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+        .card-custom { border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .badge-skill-found { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; padding: 0.4em 0.7em; font-size: 0.85rem; border-radius: 6px; }
+        .badge-skill-missing { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; padding: 0.4em 0.7em; font-size: 0.85rem; border-radius: 6px; }
+        .badge-keyword-cloud { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 0.35em 0.65em; font-size: 0.8rem; border-radius: 6px; }
+        
+        .resume-container { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background-color: #f8fafc; }
+        .resume-header { background-color: #f1f5f9; padding: 0.65rem 1rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .resume-body-scroll { max-height: 420px; overflow-y: auto; padding: 1rem; background-color: #f8fafc; }
+        .resume-section-card { background-color: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #2563eb; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .resume-section-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: #1e293b; letter-spacing: 0.05em; margin-bottom: 0.5rem; display: inline-block; background-color: #eff6ff; padding: 2px 8px; border-radius: 4px; }
+        .resume-section-content { font-family: 'Fira Code', monospace; font-size: 0.83rem; line-height: 1.6; color: #334155; white-space: pre-wrap; word-break: break-word; }
+        .highlight-found { background-color: #dcfce7; color: #15803d; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #86efac; }
+        .dropdown-menu-search { max-height: 220px; overflow-y: auto; width: 100%; }
+        @media print { .no-print { display: none !important; } }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark navbar-custom mb-4 no-print py-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <a href="/" class="navbar-brand mb-0 h4 fw-bold text-decoration-none">🎯 Smart Resume Analyzer</a>
+            <div>
+                <a href="/manage-roles" class="btn btn-outline-light btn-sm me-2">⚙️ Manage Job Roles</a>
+                <a href="/history" class="btn btn-outline-light btn-sm">📜 View History Log</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <div class="row g-4">
+            <!-- Upload Panel -->
+            <div class="col-md-5 no-print">
+                <div class="card card-custom mb-4">
+                    <div class="card-body">
+                        <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                            <div class="mb-3">
+                                <label class="form-label fw-medium small">Select PDF or DOCX File</label>
+                                <input class="form-control" type="file" name="resume" id="resumeFileInput" accept=".pdf, .docx" onchange="validateFileSelection()">
+                            </div>
+
+                            <div class="mb-3 position-relative">
+                                <label class="form-label fw-medium small">Target Job Role</label>
+                                <input type="hidden" name="role" id="selectedRoleInput" value="{{ role }}">
+                                <div class="dropdown">
+                                    <button class="form-select text-start d-flex justify-content-between align-items-center" type="button" id="roleDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <span id="selectedRoleLabel">{{ role }}</span>
+                                    </button>
+                                    <div class="dropdown-menu p-2 dropdown-menu-search shadow-sm" aria-labelledby="roleDropdownBtn">
+                                        <input type="text" class="form-control form-control-sm mb-2" id="roleSearchBox" placeholder="Type to filter roles..." onkeyup="filterDropdownRoles()">
+                                        <ul class="list-unstyled mb-0" id="roleDropdownList">
+                                            {% for r in available_roles %}
+                                            <li>
+                                                <button type="button" class="dropdown-item py-1 rounded small" onclick="selectRole('{{ r }}')">{{ r }}</button>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 fw-medium" id="submitBtn" disabled>Analyze Resume</button>
+                        </form>
+
+                        {% if results %}
+                        <form method="POST" action="/clear-analysis" class="mt-2">
+                            <button type="submit" class="btn btn-outline-secondary w-100 fw-medium">🔄 Analyze Another Resume</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Dashboard -->
+            <div class="col-md-7">
+                {% if results %}
+                <div class="card card-custom mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <h5 class="fw-bold mb-1">Dashboard for {{ results.active_role_label }}</h5>
+                            {% if results.nlp_enabled %}
+                            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle small fw-normal">🧠 spaCy NLP matching active</span>
+                            {% else %}
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle small fw-normal">Rule-based matching (spaCy model not installed)</span>
+                            {% endif %}
+                        </div>
+                        <button onclick="window.print()" class="btn btn-sm btn-outline-secondary no-print">🖨️ Export PDF / Print</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 mb-4 text-center">
+                            <div class="col-6">
+                                <div class="p-3 bg-light rounded border">
+                                    <h6 class="text-uppercase text-secondary small fw-bold mb-1">Skills ATS Score</h6>
+                                    <div class="display-6 text-success fw-bold">{{ results.ats_score }}%</div>
+                                    <small class="text-muted">Keywords Match</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 bg-light rounded border">
+                                    <h6 class="text-uppercase text-secondary small fw-bold mb-1">Quality & Format Score</h6>
+                                    <div class="display-6 text-primary fw-bold">{{ results.quality_score }}%</div>
+                                    <small class="text-muted">Structure & Metrics Audit</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Itemized Score Breakdown Table -->
+                        <h6 class="fw-bold mb-2">Detailed Point Evaluation Breakdown</h6>
+                        <div class="table-responsive mb-4">
+                            <table class="table table-sm table-bordered align-middle small mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Evaluation Category</th>
+                                        <th style="width: 110px;" class="text-center">Score</th>
+                                        <th>Evaluation Criterion & Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in results.score_breakdown %}
+                                    <tr>
+                                        <td class="fw-bold">{{ item.category }}</td>
+                                        <td class="text-center fw-bold text-primary">{{ item.score }}</td>
+                                        <td class="text-muted">{{ item.criteria }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Recommendations -->
+                        <div class="p-3 mb-4 bg-light rounded border">
+                            <h6 class="fw-bold mb-1">💡 AI Best Role Recommendation</h6>
+                            <h5 class="fw-bold text-success mb-3">{{ results.best_matching_role }} ({{ results.best_matching_score }}% Match)</h5>
+                            
+                            <h6 class="fw-bold text-dark mb-2 small">Top 5 Matching Roles:</h6>
+                            <div class="row g-2">
+                                {% for r_name, r_data in (results.role_matches.items()|sort(attribute='1.ats_percentage', reverse=True))[:5] %}
+                                <div class="col-md-6">
+                                    <div class="d-flex justify-content-between align-items-center p-2 bg-white rounded border small">
+                                        <span>{{ r_name }}</span>
+                                        <span class="badge {% if r_data.ats_percentage >= 70 %}bg-success{% elif r_data.ats_percentage >= 40 %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill">
+                                            {{ r_data.ats_percentage }}%
+                                        </span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Target Keywords & Skills -->
+                        <h6 class="fw-bold mb-2">Target Job Keywords / Skills</h6>
+                        <div class="mb-4">
+                            {% for kw in results.target_keywords %}
+                                <span class="badge badge-keyword-cloud me-1 mb-1">{{ kw }}</span>
+                            {% endfor %}
+                        </div>
+
+                        <h6 class="fw-bold mb-2">Detected Skills</h6>
+                        <div class="mb-3">
+                            {% for skill in results.selected_found_skills %}
+                                <span class="badge badge-skill-found me-1 mb-1">{{ skill }}</span>
+                            {% else %}
+                                <span class="text-muted small">None detected.</span>
+                            {% endfor %}
+                        </div>
+
+                        <h6 class="fw-bold mb-2">Missing Recommended Skills</h6>
+                        <div class="mb-4">
+                            {% for skill in results.selected_missing_skills %}
+                                <span class="badge badge-skill-missing me-1 mb-1">{{ skill }}</span>
+                            {% else %}
+                                <span class="text-success small fw-bold">All target skills detected!</span>
+                            {% endfor %}
+                        </div>
+
+                        <h6 class="fw-bold mb-2">Structure & Action Verbs Audit</h6>
+                        <ul class="list-group list-group-flush mb-4">
+                            <li class="list-group-item bg-transparent small px-0 border-0">• Action Verbs Detected: <strong>{{ results.action_verb_count }}</strong></li>
+                            {% for suggestion in results.feedback %}
+                                <li class="list-group-item bg-transparent text-danger small px-0 border-0">• {{ suggestion }}</li>
+                            {% else %}
+                                <li class="list-group-item bg-transparent text-success small px-0 border-0">• Excellent structure and contact details detected!</li>
+                            {% endfor %}
+                        </ul>
+
+                        <h6 class="fw-bold mb-2">Parsed Resume Text (Structured View)</h6>
+                        <div class="resume-container mb-2">
+                            <div class="resume-header">
+                                <span class="text-muted small fw-medium">📄 Sectionized Content</span>
+                                <span class="badge bg-light text-dark border small fw-normal">
+                                    Matched: <strong class="text-success">{{ results.selected_found_skills|length }}</strong> / {{ results.target_keywords|length }} Skills
+                                </span>
+                            </div>
+                            <div class="resume-body-scroll" id="parsedResumeContainer"></div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card card-custom p-5 text-center text-muted">
+                    <h5>No Resume Analyzed Yet</h5>
+                    <p class="small mb-0">Upload a resume to view ATS match scores, role recommendations, point evaluation breakdowns, and skill overlays.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function validateFileSelection() {
+            const fileInput = document.getElementById('resumeFileInput');
+            const submitBtn = document.getElementById('submitBtn');
+            if (fileInput.files && fileInput.files.length > 0) {
+                submitBtn.removeAttribute('disabled');
+            } else {
+                submitBtn.setAttribute('disabled', 'true');
+            }
+        }
+
+        function filterDropdownRoles() {
+            const query = document.getElementById('roleSearchBox').value.toLowerCase().trim();
+            const items = document.querySelectorAll('#roleDropdownList li');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(query) ? 'block' : 'none';
+            });
+        }
+
+        function selectRole(roleName) {
+            document.getElementById('selectedRoleInput').value = roleName;
+            document.getElementById('selectedRoleLabel').innerText = roleName;
+        }
+
+        {% if results %}
+        const rawText = {{ results.raw_text | tojson }};
+        const foundSkills = {{ results.selected_found_skills | tojson }};
+        const container = document.getElementById('parsedResumeContainer');
+        const sectionHeaders = ['SUMMARY', 'OBJECTIVE', 'EXPERIENCE', 'WORK EXPERIENCE', 'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'PROJECTS', 'CERTIFICATIONS'];
+
+        const lines = rawText.split('\n');
+        let currentSection = { title: 'GENERAL / OVERVIEW', content: [] };
+        let sections = [];
+
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            const upper = trimmed.toUpperCase();
+            
+            if (sectionHeaders.includes(upper) || (trimmed.length < 30 && upper === trimmed && trimmed.length > 3)) {
+                if (currentSection.content.length > 0) {
+                    sections.push(currentSection);
+                }
+                currentSection = { title: trimmed, content: [] };
+            } else {
+                currentSection.content.push(line);
+            }
+        });
+        if (currentSection.content.length > 0) {
+            sections.push(currentSection);
+        }
+
+        sections.forEach(sec => {
+            let sectionText = sec.content.join('\n').trim();
+            if (!sectionText) return;
+
+            foundSkills.forEach(skill => {
+                const regex = new RegExp(`\\b(${skill})\\b`, 'gi');
+                sectionText = sectionText.replace(regex, '<span class="highlight-found">$1</span>');
+            });
+
+            const card = document.createElement('div');
+            card.className = 'resume-section-card';
+            card.innerHTML = `
+                <div class="resume-section-title">${sec.title}</div>
+                <div class="resume-section-content">${sectionText}</div>
+            `;
+            container.appendChild(card);
+        });
+        {% endif %}
+    </script>
+</body>
+</html>
